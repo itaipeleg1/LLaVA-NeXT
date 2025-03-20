@@ -93,7 +93,7 @@ class LlavaMetaModel:
         self.config.mm_vision_select_feature = mm_vision_select_feature
         self.config.mm_patch_merge_type = mm_patch_merge_type
 
-        
+
         if not hasattr(self.config, 'add_faster_video'):
             if model_args.add_faster_video:
                 embed_std = 1 / torch.sqrt(torch.tensor(self.config.hidden_size, dtype=self.dtype))
@@ -193,8 +193,9 @@ class LlavaMetaForCausalLM(ABC):
         image_features = self.get_model().get_vision_tower()(images)
         # image_features = self.get_model().vision_resampler(image_features, images=images)
         image_features = self.get_model().mm_projector(image_features)
+        #self.get_model().mm_projector(image_features[:,0,:])
         return image_features
-    
+
     def encode_multimodals(self, videos_or_images, video_idx_in_batch, split_sizes=None):
         videos_or_images_features = self.get_model().get_vision_tower()(videos_or_images)
         per_videos_or_images_features = torch.split(videos_or_images_features, split_sizes, dim=0)  # tuple, (dim_1, 576, 4096)
@@ -203,7 +204,7 @@ class LlavaMetaForCausalLM(ABC):
         cur_mm_spatial_pool_stride = self.config.mm_spatial_pool_stride
 
         for idx, feat in enumerate(per_videos_or_images_features):
-            
+
             feat = self.get_model().mm_projector(feat)
             faster_video_feature = 0
             slower_img_feat = 0
@@ -326,14 +327,14 @@ class LlavaMetaForCausalLM(ABC):
                                 image_feature = torch.cat(concat_slow_fater_token)
 
                                 # print("!!!!!!!!!!!!")
-                        
+
                             new_image_features.append(image_feature)
                         elif mm_newline_position == "frame":
                             # Frame-wise
                             image_feature = self.add_token_per_frame(image_feature)
 
                             new_image_features.append(image_feature.flatten(0, 1))
-                            
+
                         elif mm_newline_position == "one_token":
                             # one-token
                             image_feature = image_feature.flatten(0, 1)
@@ -342,7 +343,7 @@ class LlavaMetaForCausalLM(ABC):
                                     image_feature,
                                     self.model.image_newline[None].to(image_feature.device)
                                 ), dim=0)
-                            new_image_features.append(image_feature)      
+                            new_image_features.append(image_feature)
                         elif mm_newline_position == "no_token":
                             new_image_features.append(image_feature.flatten(0, 1))
                         else:
@@ -552,7 +553,8 @@ class LlavaMetaForCausalLM(ABC):
             position_ids[:, split_position:] += right_add
         # import pdb; pdb.set_trace()
         # rank0_print("Finish preparing")
-        return None, position_ids, attention_mask, past_key_values, new_input_embeds, new_labels
+        user_prompt_features = cur_input_embeds_no_im[-1]
+        return None, position_ids, attention_mask, past_key_values, new_input_embeds, new_labels, image_features, user_prompt_features
 
     def initialize_vision_tokenizer(self, model_args, tokenizer):
         if model_args.mm_use_im_patch_token:
