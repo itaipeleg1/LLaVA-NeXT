@@ -8,7 +8,7 @@ from llava.model.builder import load_pretrained_model
 from llava.mm_utils import get_model_name_from_path, process_images, tokenizer_image_token
 from llava.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN, IGNORE_INDEX
 from llava.conversation import conv_templates, SeparatorStyle
-from docs.clip_eval import fix_wsl_paths, save_cls
+from clip_eval import fix_wsl_paths, save_cls
 import torch
 import cv2
 import numpy as np
@@ -18,19 +18,12 @@ import copy
 import warnings
 from decord import VideoReader, cpu
 
-def get_hostname():
-    import socket
-    hostname = socket.gethostname()
-    print("Running on:", hostname)
-    return hostname
-hostname = get_hostname()
-if 'psychology' in hostname:
-    os.environ["HF_HOME"] = "/home/new_storage/HuggingFace_cache"
-    os.environ["TRANSFORMERS_CACHE"] = "/home/new_storage/HuggingFace_cache"
-    os.environ["HF_DATASETS_CACHE"] = "/home/new_storage/HuggingFace_cache"
-    os.environ["HF_TOKENIZERS_CACHE"] = "/home/new_storage/HuggingFace_cache"
+os.environ["HF_HOME"] = "/home/new_storage/HuggingFace_cache"
+os.environ["TRANSFORMERS_CACHE"] = "/home/new_storage/HuggingFace_cache"
+os.environ["HF_DATASETS_CACHE"] = "/home/new_stpiporage/HuggingFace_cache"
+os.environ["HF_TOKENIZERS_CACHE"] = "/home/new_storage/HuggingFace_cache"
 
-warnings.filterwarnings("ignore")
+
 # Load the OneVision model
 pretrained = "lmms-lab/llava-onevision-qwen2-7b-ov-chat"
 model_name = "llava_qwen"
@@ -45,7 +38,7 @@ model.eval()
 
 
 # Function to extract frames from video
-def load_movie(video_path, max_frames_num, output_dir, vr=None, start_frame=0, fps=25, duration=3, **kwargs):
+def load_movie(video_path, max_frames_num, output_dir, vr=None, start_frame=0, fps=25, duration=6, **kwargs):
     if vr is None:
         vr = VideoReader(video_path, ctx=cpu(0))
     end_frame = start_frame + fps * duration
@@ -75,28 +68,19 @@ def create_video_clip(frames, output_path):
 
 
 # Load and process video
-if 'psychology' in hostname:
-    # png_dir = r"/home/new_storage/experiments/NND/500daysofsummer/png"
-    # annot_df_path = "/home/Alon/data/summer/annotations/frame_distances_avg_1s_full.csv"
-    video_path = r"/home/new_storage/experiments/NND/500 Days Of Summer.2009.720p.BDRip.x264-VLiS.mp4"
-else:
-    video_path = r"D:\Projects\Annotators\data\Sherlock.S01E01.A.Study.in.Pink.mkv"
-    # video_path = r"E:\moments\Moments_in_Time_layla\training\working\t2z1X76v4ys_178.mp4"
-    video_path = video_path.replace("\\", os.sep)
-    drive = video_path.split(os.sep)[0]
-    video_path = video_path.replace(drive, f'/mnt/{drive[0].lower()}')
+video_path ="/home/new_storage/sherlock/STS_sherlock/projects data/Sherlock.S01E01.A.Study.in.Pink.1080p.10bit.BluRay.5.1.x265.HEVC-MZABI.mkv"
 output_dir = Path(video_path).parent / 'Sherlock'
 output_dir.mkdir(exist_ok=True, parents=True)
-result_path = output_dir / 'llava_3s_video_results_primitives.csv'
+result_path = output_dir / 'llava_6s_video_results_primitives.csv'
 result_df = pd.DataFrame(columns=['seconds', 'start_frame', 'end_frame', 'question', 'response'])
 fps = 25
-offset = 243 * fps
-# offset = 0
+#offset = 243 * fps
+offset = 0
 vr = VideoReader(video_path, ctx=cpu(0))
 
-for frame_ind in range(offset, len(vr), fps * 3):
+for frame_ind in range(offset, len(vr), fps * 6):
     video_frames_dd = {"frames": None, "start_frame": frame_ind, "vr": vr, "max_frames_num": 16,
-                       "video_path": video_path, "fps": fps, "duration": 3, "output_dir": output_dir}
+                       "video_path": video_path, "fps": fps, "duration": 6, "output_dir": output_dir}
     video_frames_dd = load_movie(**video_frames_dd)
     video_frames = video_frames_dd['frames']
 
@@ -107,7 +91,7 @@ for frame_ind in range(offset, len(vr), fps * 3):
 
     # Prepare conversation input
     conv_template = "qwen_1_5"
-    question = (f"Describe where each of people is located in the video, what are they doing, and where are they looking")
+    question = (f"Is there social interaction in the video?")
     full_prompt = f"{DEFAULT_IMAGE_TOKEN}\n {question}"
     conv = copy.deepcopy(conv_templates[conv_template])
     conv.append_message(conv.roles[0], full_prompt)
@@ -118,7 +102,7 @@ for frame_ind in range(offset, len(vr), fps * 3):
     image_sizes = [frame.size for frame in video_frames]
 
     # Generate response
-    cont, image_embeds = model.generate(
+    cont = model.generate(
         input_ids,
         images=image_tensors,
         image_sizes=image_sizes,
@@ -129,6 +113,7 @@ for frame_ind in range(offset, len(vr), fps * 3):
         return_dict_in_generate=True,
         modalities=["video"],
     )
+    print(f"**********************************{type(cont)}*************************************")
     text_outputs = tokenizer.batch_decode(cont.sequences, skip_special_tokens=True)[0]
     frame_time = frame_ind // fps
     # convert to minutes : seconds
@@ -138,7 +123,7 @@ for frame_ind in range(offset, len(vr), fps * 3):
     print(text_outputs)
     language_latent = cont.hidden_states[-1][-1].view(-1)
     save_cls(str(frame_ind), language_latent, output_dir=output_dir / 'llm_language_embeds')
-    save_cls(str(frame_ind), image_embeds[0], output_dir=output_dir / 'vision_only_embeds')
+    #save_cls(str(frame_ind), image_embeds[0], output_dir=output_dir / 'vision_only_embeds')
 
     clip_res = {'start_frame': video_frames_dd['start_frame'], 'end_frame': video_frames_dd['end_frame'],
                 'seconds': frame_ind // fps,  'question': question, 'response': text_outputs[0]}
