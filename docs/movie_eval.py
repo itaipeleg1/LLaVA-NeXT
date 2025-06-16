@@ -74,7 +74,7 @@ output_dir.mkdir(exist_ok=True, parents=True)
 
 result_df = pd.DataFrame(columns=['seconds', 'start_frame', 'end_frame', 'question', 'response'])
 fps = 25
-durs = np.arange(6, 15, 1.5) # 3 seconds
+durs = np.arange(15,21, 1.5) # 3 seconds
 #offset = 243 * fps
 offset = 0
 vr = VideoReader(video_path, ctx=cpu(0))
@@ -122,7 +122,7 @@ for duration in durs:
 
         # Prepare conversation input
         conv_template = "qwen_1_5"
-        question = (f"Does this video contain social interaction?")
+        question = (f"Does this video contain people interacting with one another? Answear in 1 word - yes or no?")
         full_prompt = f"{DEFAULT_IMAGE_TOKEN}\n {question}"
         conv = copy.deepcopy(conv_templates[conv_template])
         conv.append_message(conv.roles[0], full_prompt)
@@ -182,3 +182,17 @@ for duration in durs:
 
         print(f"🔁 Advancing frame_ind by {step} frames, response: {text_outputs}")
         frame_ind += step
+    # Save final results for this duration
+    annot_binary = result_df['response'].apply(lambda x: 1 if 'yes' in x.lower() else 0)
+    annot_binary = np.array(annot_binary)
+    annot_binary = np.repeat(annot_binary,duration//1.5)
+    orig = np.load("/home/new_storage/sherlock/STS_sherlock/projects data/annotations/social_nonsocial.npy")
+    orig = orig.flatten()
+    anima = orig[:27]
+    annotation = np.concatenate((anima,annot_binary), axis=0)
+    t1 = annotation[:946]
+    t2 = annotation[946:]
+    annotation = np.concatenate([t1,anima,t2])
+    annotation = annotation[:1976]
+    annotation = np.reshape(annotation, (-1, 1))
+    np.save(os.path.join("/home/new_storage/sherlock/STS_sherlock/projects data/annotations", f'llava_{duration}s_video.npy'), annotation)
